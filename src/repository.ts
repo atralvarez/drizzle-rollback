@@ -16,7 +16,9 @@ interface Journal {
 export function loadMigrations(out: string): MigrationFile[] {
   const journalPath = join(out, "meta", "_journal.json");
   if (!existsSync(journalPath)) {
-    throw new Error(`No Drizzle journal found at ${journalPath}. Run \`drizzle-kit generate\` first.`);
+    throw new Error(
+      `No Drizzle journal found at ${journalPath}. Run \`drizzle-kit generate\` first.`,
+    );
   }
   const journal = JSON.parse(readFileSync(journalPath, "utf-8")) as Journal;
 

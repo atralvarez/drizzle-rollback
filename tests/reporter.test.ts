@@ -1,14 +1,16 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { loadMigrations } from "../src/repository.js";
 import { buildStatus, runCheck } from "../src/reporter.js";
+import { loadMigrations } from "../src/repository.js";
 
 const OUT = join(__dirname, "fixtures/project/drizzle");
 
 function hashOf(tag: string): string {
-  return createHash("sha256").update(readFileSync(join(OUT, `${tag}.sql`)).toString()).digest("hex");
+  return createHash("sha256")
+    .update(readFileSync(join(OUT, `${tag}.sql`)).toString())
+    .digest("hex");
 }
 
 describe("reporter", () => {

@@ -1,12 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { rollback } from "../src/runner.js";
 import { PostgresDialect } from "../src/dialects/postgres.js";
+import { rollback } from "../src/runner.js";
 import type { ResolvedConfig } from "../src/types.js";
 
 let container: StartedPostgreSqlContainer;
@@ -62,10 +62,10 @@ beforeEach(async () => {
   await client.query(
     'CREATE TABLE "drizzle"."__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)',
   );
-  await client.query("INSERT INTO \"drizzle\".\"__drizzle_migrations\" (hash, created_at) VALUES ($1, 1), ($2, 2)", [
-    hash(UP_0),
-    hash(UP_1),
-  ]);
+  await client.query(
+    'INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ($1, 1), ($2, 2)',
+    [hash(UP_0), hash(UP_1)],
+  );
   await client.query(UP_0);
   await client.query(UP_1);
   await client.end();
@@ -76,7 +76,9 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 async function appliedHashes(): Promise<string[]> {
   const client = new Client({ connectionString: url });
   await client.connect();
-  const res = await client.query("SELECT hash FROM \"drizzle\".\"__drizzle_migrations\" ORDER BY created_at");
+  const res = await client.query(
+    'SELECT hash FROM "drizzle"."__drizzle_migrations" ORDER BY created_at',
+  );
   await client.end();
   return res.rows.map((r) => r.hash);
 }
