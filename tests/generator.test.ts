@@ -3,8 +3,8 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { generateDownStubs } from "../src/generator.js";
 import { STUB_MARKER } from "../src/constants.js";
+import { generateDownStubs } from "../src/generator.js";
 
 let dir: string;
 let out: string;

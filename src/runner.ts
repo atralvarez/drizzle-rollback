@@ -37,7 +37,9 @@ function pairApplied(
   return applied.map((row) => {
     const migration = byHash.get(row.hash);
     if (!migration) {
-      throw new Error(`Applied migration with hash ${row.hash} has no matching .sql file in the migrations folder.`);
+      throw new Error(
+        `Applied migration with hash ${row.hash} has no matching .sql file in the migrations folder.`,
+      );
     }
     return { row, migration };
   });
@@ -59,11 +61,15 @@ function selectTargets(
 
 function readDownSql(migration: MigrationFile): string {
   if (!migration.hasDown) {
-    throw new Error(`Migration "${migration.tag}" has no .down.sql. Run \`drizzle-rollback generate\` and write it.`);
+    throw new Error(
+      `Migration "${migration.tag}" has no .down.sql. Run \`drizzle-rollback generate\` and write it.`,
+    );
   }
   const sql = readFileSync(migration.downPath, "utf-8");
   if (sql.includes(STUB_MARKER)) {
-    throw new Error(`Down migration for "${migration.tag}" is an unedited stub. Write the reverse SQL first.`);
+    throw new Error(
+      `Down migration for "${migration.tag}" is an unedited stub. Write the reverse SQL first.`,
+    );
   }
   return sql.trim();
 }

@@ -34,7 +34,9 @@ export async function loadConfig(
 
   const dialect = opts.dialectOverride ?? raw.dialect;
   if (dialect !== "postgresql") {
-    throw new Error(`drizzle-rollback v0.1 only supports postgresql (got "${dialect ?? "undefined"}").`);
+    throw new Error(
+      `drizzle-rollback v0.1 only supports postgresql (got "${dialect ?? "undefined"}").`,
+    );
   }
   if (!raw.dbCredentials) {
     throw new Error("drizzle config is missing `dbCredentials`.");

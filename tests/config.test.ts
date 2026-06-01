@@ -16,6 +16,8 @@ describe("loadConfig", () => {
   });
 
   it("rejects non-postgres dialects in v0.1", async () => {
-    await expect(loadConfig(CONFIG, { dialectOverride: "mysql" })).rejects.toThrow(/only supports postgresql/i);
+    await expect(loadConfig(CONFIG, { dialectOverride: "mysql" })).rejects.toThrow(
+      /only supports postgresql/i,
+    );
   });
 });

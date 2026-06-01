@@ -23,7 +23,9 @@ beforeAll(async () => {
   await client.query(
     'CREATE TABLE "drizzle"."__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)',
   );
-  await client.query("INSERT INTO \"drizzle\".\"__drizzle_migrations\" (hash, created_at) VALUES ('hash_a', 1), ('hash_b', 2)");
+  await client.query(
+    "INSERT INTO \"drizzle\".\"__drizzle_migrations\" (hash, created_at) VALUES ('hash_a', 1), ('hash_b', 2)",
+  );
   await client.query('CREATE TABLE "widgets" ("id" serial PRIMARY KEY)');
   await client.end();
 });

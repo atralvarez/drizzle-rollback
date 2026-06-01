@@ -1,10 +1,10 @@
 import { Command } from "commander";
 import prompts from "prompts";
 import { loadConfig } from "./config.js";
-import { generateDownStubs } from "./generator.js";
-import { loadMigrations } from "./repository.js";
-import { buildStatus, runCheck } from "./reporter.js";
 import { PostgresDialect } from "./dialects/postgres.js";
+import { generateDownStubs } from "./generator.js";
+import { buildStatus, runCheck } from "./reporter.js";
+import { loadMigrations } from "./repository.js";
 import { rollback } from "./runner.js";
 
 interface GlobalOpts {
