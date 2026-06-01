@@ -21,8 +21,8 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
   const meta = current._meta;
   const ops: Operation[] = [];
 
-  // --- renames (from _meta): reverse new -> old, skip in add/drop detection ---
-  const renamedTablesNewKey = new Set<string>();
+  // --- table renames (from _meta): reverse new -> old ---
+  const renamedTableNewToOld = new Map<string, string>(); // current key -> before key
   const renamedTablesOldKey = new Set<string>();
   if (meta) {
     for (const [oldKey, newKey] of Object.entries(meta.tables)) {
@@ -30,13 +30,14 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
       const old = before.tables[oldKey];
       if (cur && old) {
         ops.push({ kind: "renameTable", schema: cur.schema, from: cur.name, to: old.name });
-        renamedTablesNewKey.add(newKey);
+        renamedTableNewToOld.set(newKey, oldKey);
         renamedTablesOldKey.add(oldKey);
       }
     }
   }
 
-  const renamedColsByTable = new Map<string, Map<string, string>>();
+  // --- column renames (from _meta) ---
+  const renamedColsByTable = new Map<string, Map<string, string>>(); // current table key -> (newCol -> oldCol)
   if (meta) {
     for (const [oldKey, newKey] of Object.entries(meta.columns)) {
       const oldCol = oldKey.split(".").pop() as string;
@@ -45,10 +46,14 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
       const tableKey = newColParts.join(".");
       const cur = current.tables[tableKey];
       if (!cur) continue;
+      // Use the OLD table name: by the time column renames run, the table has been
+      // renamed back to its previous name (renameTable ops are emitted first).
+      const oldTableKey = renamedTableNewToOld.get(tableKey);
+      const tableName = oldTableKey ? before.tables[oldTableKey].name : cur.name;
       ops.push({
         kind: "renameColumn",
         schema: cur.schema,
-        table: cur.name,
+        table: tableName,
         from: newCol,
         to: oldCol,
       });
@@ -58,15 +63,15 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
     }
   }
 
-  // --- tables created by the up (in current, not before) -> drop ---
+  // --- tables created by the up (in current, not before, not a rename) -> drop ---
   for (const [key, t] of Object.entries(current.tables)) {
-    if (renamedTablesNewKey.has(key)) continue;
+    if (renamedTableNewToOld.has(key)) continue;
     if (!before.tables[key]) {
       ops.push({ kind: "dropTable", schema: t.schema, table: t.name });
     }
   }
 
-  // --- tables dropped by the up (in before, not current) -> re-create (lossy) ---
+  // --- tables dropped by the up (in before, not current, not a rename) -> re-create (lossy) ---
   for (const [key, t] of Object.entries(before.tables)) {
     if (renamedTablesOldKey.has(key)) continue;
     if (!current.tables[key]) {
@@ -74,62 +79,67 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
     }
   }
 
-  // --- tables in both -> diff columns (extended in Task 5 for indexes/fks/constraints/enums) ---
+  // --- tables present in both states (same key OR renamed) -> diff contents ---
+  // For a renamed table, all column/constraint ops use the OLD table name, because the
+  // down renames the table back to its previous name before these ops run.
+  const tablePairs: Array<{ old: SnapshotTable; cur: SnapshotTable; curKey: string }> = [];
   for (const [key, cur] of Object.entries(current.tables)) {
-    const old = before.tables[key];
-    if (!old) continue;
-    const renames = renamedColsByTable.get(key) ?? new Map<string, string>();
+    const oldKey = renamedTableNewToOld.get(key) ?? key;
+    const old = before.tables[oldKey];
+    if (old) tablePairs.push({ old, cur, curKey: key });
+  }
+
+  for (const { old, cur, curKey } of tablePairs) {
+    const renames = renamedColsByTable.get(curKey) ?? new Map<string, string>();
+    const tName = old.name;
+    const tSchema = old.schema;
 
     // columns added by the up -> drop (skip renamed)
     for (const [colName, col] of Object.entries(cur.columns)) {
       if (renames.has(colName)) continue;
       if (!old.columns[colName]) {
-        ops.push({ kind: "dropColumn", schema: cur.schema, table: cur.name, column: col.name });
+        ops.push({ kind: "dropColumn", schema: tSchema, table: tName, column: col.name });
       }
     }
-
-    // columns dropped by the up -> re-add from prev def (lossy)
+    // columns dropped by the up -> re-add from prev def (lossy) (skip renamed)
     for (const [colName, col] of Object.entries(old.columns)) {
-      const wasRenamedTo = [...renames.values()].some((oldC) => oldC === colName);
+      const wasRenamedTo = [...renames.values()].includes(colName);
       if (wasRenamedTo) continue;
       if (!cur.columns[colName]) {
-        ops.push({ kind: "addColumn", schema: cur.schema, table: cur.name, column: col });
+        ops.push({ kind: "addColumn", schema: tSchema, table: tName, column: col });
       }
     }
-
-    // columns in both -> attribute reverts
+    // columns in both -> attribute reverts (use the OLD column name for renamed columns)
     for (const [colName, curCol] of Object.entries(cur.columns)) {
-      const oldCol = old.columns[colName];
+      const oldName = renames.get(colName) ?? colName;
+      const oldCol = old.columns[oldName];
       if (!oldCol) continue;
-
       if (curCol.type !== oldCol.type) {
         ops.push({
           kind: "alterColumnType",
-          schema: cur.schema,
-          table: cur.name,
-          column: colName,
+          schema: tSchema,
+          table: tName,
+          column: oldName,
           toType: oldCol.type,
           typeSchema: oldCol.typeSchema,
         });
       }
-
       if (curCol.notNull !== oldCol.notNull) {
         ops.push(
           oldCol.notNull
-            ? { kind: "setNotNull", schema: cur.schema, table: cur.name, column: colName }
-            : { kind: "dropNotNull", schema: cur.schema, table: cur.name, column: colName },
+            ? { kind: "setNotNull", schema: tSchema, table: tName, column: oldName }
+            : { kind: "dropNotNull", schema: tSchema, table: tName, column: oldName },
         );
       }
-
       if (defOf(curCol) !== defOf(oldCol)) {
         ops.push(
           defOf(oldCol) === undefined
-            ? { kind: "dropDefault", schema: cur.schema, table: cur.name, column: colName }
+            ? { kind: "dropDefault", schema: tSchema, table: tName, column: oldName }
             : {
                 kind: "setDefault",
-                schema: cur.schema,
-                table: cur.name,
-                column: colName,
+                schema: tSchema,
+                table: tName,
+                column: oldName,
                 value: defOf(oldCol) as string | number | boolean,
               },
         );
@@ -138,56 +148,77 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
 
     // indexes
     for (const name of Object.keys(cur.indexes)) {
-      if (!old.indexes[name]) ops.push({ kind: "dropIndex", schema: cur.schema, name });
+      if (!old.indexes[name]) ops.push({ kind: "dropIndex", schema: tSchema, name });
     }
     for (const [name, index] of Object.entries(old.indexes)) {
       if (!cur.indexes[name])
-        ops.push({ kind: "createIndex", schema: cur.schema, table: cur.name, index });
+        ops.push({ kind: "createIndex", schema: tSchema, table: tName, index });
     }
     // foreign keys
     for (const name of Object.keys(cur.foreignKeys)) {
       if (!old.foreignKeys[name])
-        ops.push({ kind: "dropForeignKey", schema: cur.schema, table: cur.name, name });
+        ops.push({ kind: "dropForeignKey", schema: tSchema, table: tName, name });
     }
     for (const [name, fk] of Object.entries(old.foreignKeys)) {
       if (!cur.foreignKeys[name])
-        ops.push({ kind: "addForeignKey", schema: cur.schema, table: cur.name, fk });
+        ops.push({ kind: "addForeignKey", schema: tSchema, table: tName, fk });
     }
     // unique constraints
     for (const name of Object.keys(cur.uniqueConstraints)) {
       if (!old.uniqueConstraints[name])
-        ops.push({ kind: "dropUnique", schema: cur.schema, table: cur.name, name });
+        ops.push({ kind: "dropUnique", schema: tSchema, table: tName, name });
     }
     for (const [name, unique] of Object.entries(old.uniqueConstraints)) {
       if (!cur.uniqueConstraints[name])
-        ops.push({ kind: "addUnique", schema: cur.schema, table: cur.name, unique });
+        ops.push({ kind: "addUnique", schema: tSchema, table: tName, unique });
     }
     // composite primary keys
     for (const name of Object.keys(cur.compositePrimaryKeys)) {
       if (!old.compositePrimaryKeys[name])
-        ops.push({ kind: "dropCompositePk", schema: cur.schema, table: cur.name, name });
+        ops.push({ kind: "dropCompositePk", schema: tSchema, table: tName, name });
     }
     for (const [name, pk] of Object.entries(old.compositePrimaryKeys)) {
       if (!cur.compositePrimaryKeys[name])
-        ops.push({ kind: "addCompositePk", schema: cur.schema, table: cur.name, pk });
+        ops.push({ kind: "addCompositePk", schema: tSchema, table: tName, pk });
     }
   }
 
-  // enums
+  // --- enums ---
   for (const [key, e] of Object.entries(current.enums)) {
     const old = before.enums[key];
     if (!old) {
       ops.push({ kind: "dropEnum", schema: e.schema, name: e.name });
-    } else {
-      const added = e.values.filter((v) => !old.values.includes(v));
-      if (added.length > 0) {
-        ops.push({
-          kind: "enumValueRemovalUnsupported",
-          schema: e.schema,
-          name: e.name,
-          addedValues: added,
-        });
+      continue;
+    }
+    // values added by the up -> cannot remove them in reverse (Postgres limitation)
+    const added = e.values.filter((v) => !old.values.includes(v));
+    if (added.length > 0) {
+      ops.push({
+        kind: "enumValueRemovalUnsupported",
+        schema: e.schema,
+        name: e.name,
+        addedValues: added,
+      });
+    }
+    // values removed by the up -> re-add in reverse (safe: ALTER TYPE ADD VALUE)
+    for (let i = 0; i < old.values.length; i++) {
+      const value = old.values[i];
+      if (e.values.includes(value)) continue;
+      // restore position: place before the first later prev-value that still exists
+      let beforeValue: string | undefined;
+      for (let j = i + 1; j < old.values.length; j++) {
+        if (e.values.includes(old.values[j])) {
+          beforeValue = old.values[j];
+          break;
+        }
       }
+      ops.push({
+        kind: "addEnumValue",
+        schema: e.schema,
+        name: e.name,
+        value,
+        before: beforeValue,
+      });
     }
   }
   for (const [key, e] of Object.entries(before.enums)) {
@@ -195,11 +226,23 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
       ops.push({ kind: "createEnum", schema: e.schema, name: e.name, values: e.values });
   }
 
-  // schemas
+  // --- schema renames (from _meta): reverse new -> old ---
+  const renamedSchemaNew = new Set<string>();
+  const renamedSchemaOld = new Set<string>();
+  if (meta) {
+    for (const [oldName, newName] of Object.entries(meta.schemas)) {
+      ops.push({ kind: "renameSchema", from: newName, to: oldName });
+      renamedSchemaNew.add(newName);
+      renamedSchemaOld.add(oldName);
+    }
+  }
+  // --- schemas created/dropped by the up (excluding renames) ---
   for (const name of Object.keys(current.schemas)) {
+    if (renamedSchemaNew.has(name)) continue;
     if (!before.schemas[name]) ops.push({ kind: "dropSchema", name });
   }
   for (const name of Object.keys(before.schemas)) {
+    if (renamedSchemaOld.has(name)) continue;
     if (!current.schemas[name]) ops.push({ kind: "createSchema", name });
   }
 

@@ -53,9 +53,11 @@ export type Operation =
   | { kind: "createEnum"; schema: string; name: string; values: string[] }
   | { kind: "dropEnum"; schema: string; name: string }
   | { kind: "enumValueRemovalUnsupported"; schema: string; name: string; addedValues: string[] }
+  | { kind: "addEnumValue"; schema: string; name: string; value: string; before?: string }
   // schemas (Postgres-specific)
   | { kind: "createSchema"; name: string }
   | { kind: "dropSchema"; name: string }
+  | { kind: "renameSchema"; from: string; to: string }
   // renames (from _meta)
   | { kind: "renameTable"; schema: string; from: string; to: string }
   | { kind: "renameColumn"; schema: string; table: string; from: string; to: string };

@@ -253,3 +253,83 @@ describe("diffReverse — indexes, fks, constraints, enums, schemas", () => {
     ).toContainEqual({ kind: "dropSchema", name: "audit" });
   });
 });
+
+describe("diffReverse — review-found edge cases", () => {
+  const enumValuesSnap = (values: string[]) =>
+    snap({}, { enums: { "public.role": { name: "role", schema: "public", values } } });
+
+  it("up removed an enum value -> down re-adds it before the surviving successor", () => {
+    const ops = diffReverse(enumValuesSnap(["A", "B", "C"]), enumValuesSnap(["A", "C"]));
+    expect(ops).toContainEqual({
+      kind: "addEnumValue",
+      schema: "public",
+      name: "role",
+      value: "B",
+      before: "C",
+    });
+  });
+
+  it("appends a re-added enum value when it was last in the previous order", () => {
+    const ops = diffReverse(enumValuesSnap(["A", "B"]), enumValuesSnap(["A"]));
+    expect(ops).toContainEqual({
+      kind: "addEnumValue",
+      schema: "public",
+      name: "role",
+      value: "B",
+      before: undefined,
+    });
+  });
+
+  it("reverts column attributes on a renamed table using the old table name", () => {
+    const prev = snap({
+      "public.members": table("members", { age: col("age", "int", { notNull: false }) }),
+    });
+    const current = snap(
+      { "public.users": table("users", { age: col("age", "int", { notNull: true }) }) },
+      { _meta: { columns: {}, schemas: {}, tables: { "public.members": "public.users" } } },
+    );
+    const ops = diffReverse(prev, current);
+    expect(ops).toContainEqual({ kind: "renameTable", schema: "", from: "users", to: "members" });
+    expect(ops).toContainEqual({
+      kind: "dropNotNull",
+      schema: "",
+      table: "members",
+      column: "age",
+    });
+  });
+
+  it("when table and column are both renamed, the column rename targets the old table name", () => {
+    const prev = snap({ "public.members": table("members", { name: col("name", "text") }) });
+    const current = snap(
+      { "public.users": table("users", { full_name: col("full_name", "text") }) },
+      {
+        _meta: {
+          columns: { "public.members.name": "public.users.full_name" },
+          schemas: {},
+          tables: { "public.members": "public.users" },
+        },
+      },
+    );
+    const ops = diffReverse(prev, current);
+    expect(ops).toContainEqual({ kind: "renameTable", schema: "", from: "users", to: "members" });
+    expect(ops).toContainEqual({
+      kind: "renameColumn",
+      schema: "",
+      table: "members",
+      from: "full_name",
+      to: "name",
+    });
+  });
+
+  it("reverses a schema rename instead of dropping it", () => {
+    const prev = snap({}, { schemas: { audit: "audit" } });
+    const current = snap(
+      {},
+      { schemas: { logs: "logs" }, _meta: { columns: {}, schemas: { audit: "logs" }, tables: {} } },
+    );
+    const ops = diffReverse(prev, current);
+    expect(ops).toContainEqual({ kind: "renameSchema", from: "logs", to: "audit" });
+    expect(ops).not.toContainEqual({ kind: "dropSchema", name: "logs" });
+    expect(ops).not.toContainEqual({ kind: "createSchema", name: "audit" });
+  });
+});
