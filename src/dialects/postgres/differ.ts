@@ -135,6 +135,72 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
         );
       }
     }
+
+    // indexes
+    for (const name of Object.keys(cur.indexes)) {
+      if (!old.indexes[name]) ops.push({ kind: "dropIndex", schema: cur.schema, name });
+    }
+    for (const [name, index] of Object.entries(old.indexes)) {
+      if (!cur.indexes[name])
+        ops.push({ kind: "createIndex", schema: cur.schema, table: cur.name, index });
+    }
+    // foreign keys
+    for (const name of Object.keys(cur.foreignKeys)) {
+      if (!old.foreignKeys[name])
+        ops.push({ kind: "dropForeignKey", schema: cur.schema, table: cur.name, name });
+    }
+    for (const [name, fk] of Object.entries(old.foreignKeys)) {
+      if (!cur.foreignKeys[name])
+        ops.push({ kind: "addForeignKey", schema: cur.schema, table: cur.name, fk });
+    }
+    // unique constraints
+    for (const name of Object.keys(cur.uniqueConstraints)) {
+      if (!old.uniqueConstraints[name])
+        ops.push({ kind: "dropUnique", schema: cur.schema, table: cur.name, name });
+    }
+    for (const [name, unique] of Object.entries(old.uniqueConstraints)) {
+      if (!cur.uniqueConstraints[name])
+        ops.push({ kind: "addUnique", schema: cur.schema, table: cur.name, unique });
+    }
+    // composite primary keys
+    for (const name of Object.keys(cur.compositePrimaryKeys)) {
+      if (!old.compositePrimaryKeys[name])
+        ops.push({ kind: "dropCompositePk", schema: cur.schema, table: cur.name, name });
+    }
+    for (const [name, pk] of Object.entries(old.compositePrimaryKeys)) {
+      if (!cur.compositePrimaryKeys[name])
+        ops.push({ kind: "addCompositePk", schema: cur.schema, table: cur.name, pk });
+    }
+  }
+
+  // enums
+  for (const [key, e] of Object.entries(current.enums)) {
+    const old = before.enums[key];
+    if (!old) {
+      ops.push({ kind: "dropEnum", schema: e.schema, name: e.name });
+    } else {
+      const added = e.values.filter((v) => !old.values.includes(v));
+      if (added.length > 0) {
+        ops.push({
+          kind: "enumValueRemovalUnsupported",
+          schema: e.schema,
+          name: e.name,
+          addedValues: added,
+        });
+      }
+    }
+  }
+  for (const [key, e] of Object.entries(before.enums)) {
+    if (!current.enums[key])
+      ops.push({ kind: "createEnum", schema: e.schema, name: e.name, values: e.values });
+  }
+
+  // schemas
+  for (const name of Object.keys(current.schemas)) {
+    if (!before.schemas[name]) ops.push({ kind: "dropSchema", name });
+  }
+  for (const name of Object.keys(before.schemas)) {
+    if (!current.schemas[name]) ops.push({ kind: "createSchema", name });
   }
 
   return ops;

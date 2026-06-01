@@ -141,3 +141,115 @@ describe("diffReverse — tables & columns", () => {
     ]);
   });
 });
+
+describe("diffReverse — indexes, fks, constraints, enums, schemas", () => {
+  const enumSnap = (
+    enums: Record<string, { name: string; schema: string; values: string[] }>,
+    tables = {},
+  ) => snap(tables, { enums });
+
+  it("up created an index -> down drops it; up dropped an index -> down recreates it", () => {
+    const idx = {
+      name: "users_email_idx",
+      columns: [{ expression: "email", isExpression: false, asc: true, nulls: "last" as const }],
+      isUnique: false,
+      concurrently: false,
+      method: "btree",
+      with: {},
+    };
+    const withIdx = {
+      ...table("users", { email: col("email", "text") }),
+      indexes: { users_email_idx: idx },
+    };
+    const without = table("users", { email: col("email", "text") });
+
+    expect(
+      diffReverse(snap({ "public.users": without }), snap({ "public.users": withIdx })),
+    ).toContainEqual({ kind: "dropIndex", schema: "", name: "users_email_idx" });
+    expect(
+      diffReverse(snap({ "public.users": withIdx }), snap({ "public.users": without })),
+    ).toContainEqual({ kind: "createIndex", schema: "", table: "users", index: idx });
+  });
+
+  it("up added a foreign key -> down drops it; up dropped one -> down re-adds it", () => {
+    const fk = {
+      name: "a_b_fk",
+      tableFrom: "a",
+      tableTo: "b",
+      columnsFrom: ["b_id"],
+      columnsTo: ["id"],
+      onDelete: "cascade",
+      onUpdate: "no action",
+    };
+    const withFk = { ...table("a", { b_id: col("b_id", "uuid") }), foreignKeys: { a_b_fk: fk } };
+    const without = table("a", { b_id: col("b_id", "uuid") });
+
+    expect(diffReverse(snap({ "public.a": without }), snap({ "public.a": withFk }))).toContainEqual(
+      { kind: "dropForeignKey", schema: "", table: "a", name: "a_b_fk" },
+    );
+    expect(diffReverse(snap({ "public.a": withFk }), snap({ "public.a": without }))).toContainEqual(
+      { kind: "addForeignKey", schema: "", table: "a", fk },
+    );
+  });
+
+  it("up added a unique constraint -> down drops it", () => {
+    const uniq = { name: "u_slug", nullsNotDistinct: false, columns: ["slug"] };
+    const withU = {
+      ...table("o", { slug: col("slug", "text") }),
+      uniqueConstraints: { u_slug: uniq },
+    };
+    const without = table("o", { slug: col("slug", "text") });
+    expect(diffReverse(snap({ "public.o": without }), snap({ "public.o": withU }))).toContainEqual({
+      kind: "dropUnique",
+      schema: "",
+      table: "o",
+      name: "u_slug",
+    });
+  });
+
+  it("up added a composite primary key -> down drops it", () => {
+    const pk = { name: "c_pk", columns: ["a", "b"] };
+    const withPk = {
+      ...table("c", { a: col("a", "int"), b: col("b", "int") }),
+      compositePrimaryKeys: { c_pk: pk },
+    };
+    const without = table("c", { a: col("a", "int"), b: col("b", "int") });
+    expect(diffReverse(snap({ "public.c": without }), snap({ "public.c": withPk }))).toContainEqual(
+      { kind: "dropCompositePk", schema: "", table: "c", name: "c_pk" },
+    );
+  });
+
+  it("up created an enum -> down drops it; up dropped an enum -> down recreates it", () => {
+    const e = { "public.role": { name: "role", schema: "public", values: ["A", "B"] } };
+    expect(diffReverse(enumSnap({}), enumSnap(e))).toContainEqual({
+      kind: "dropEnum",
+      schema: "public",
+      name: "role",
+    });
+    expect(diffReverse(enumSnap(e), enumSnap({}))).toContainEqual({
+      kind: "createEnum",
+      schema: "public",
+      name: "role",
+      values: ["A", "B"],
+    });
+  });
+
+  it("up added a value to an enum -> down marks it unsupported (lossy)", () => {
+    const prev = enumSnap({ "public.role": { name: "role", schema: "public", values: ["A"] } });
+    const current = enumSnap({
+      "public.role": { name: "role", schema: "public", values: ["A", "B"] },
+    });
+    expect(diffReverse(prev, current)).toContainEqual({
+      kind: "enumValueRemovalUnsupported",
+      schema: "public",
+      name: "role",
+      addedValues: ["B"],
+    });
+  });
+
+  it("up created a schema -> down drops it", () => {
+    expect(
+      diffReverse(snap({}, { schemas: {} }), snap({}, { schemas: { audit: "audit" } })),
+    ).toContainEqual({ kind: "dropSchema", name: "audit" });
+  });
+});
