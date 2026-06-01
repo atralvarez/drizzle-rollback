@@ -1,0 +1,48 @@
+{
+  "name": "drizzle-rollback",
+  "version": "0.1.0",
+  "description": "Reliable rollbacks for Drizzle ORM migrations.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Aitor Álvarez (https://github.com/atralvarez)",
+  "keywords": ["drizzle", "drizzle-orm", "rollback", "migration", "down", "postgres"],
+  "engines": { "node": ">=18" },
+  "bin": { "drizzle-rollback": "bin/drizzle-rollback.js", "dzr": "bin/drizzle-rollback.js" },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+  },
+  "files": ["dist", "bin", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "jiti": "^2.4.2",
+    "pg": "^8.13.1",
+    "prompts": "^2.4.2"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.30.0",
+    "drizzle-kit": ">=0.21.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@testcontainers/postgresql": "^10.16.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/prompts": "^2.4.9",
+    "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.45.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
