@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { STUB_MARKER } from "../src/constants.js";
 import { emitDown } from "../src/dialects/postgres/emit.js";
 import type { Operation } from "../src/diff/operations.js";
+import type { Snapshot } from "../src/snapshot/types.js";
 
 describe("emitDown — safe ops", () => {
   it("renders DROP TABLE", () => {
@@ -123,5 +125,107 @@ describe("emitDown — safe ops", () => {
     ];
     const { sql } = emitDown(ops);
     expect(sql.indexOf("DROP CONSTRAINT")).toBeLessThan(sql.indexOf("DROP TABLE"));
+  });
+});
+
+describe("emitDown — lossy ops", () => {
+  it("comments out a re-created dropped table and sets hasUnresolved", () => {
+    const t = {
+      name: "users",
+      schema: "",
+      columns: { id: { name: "id", type: "uuid", primaryKey: true, notNull: true } },
+      indexes: {},
+      foreignKeys: {},
+      compositePrimaryKeys: {},
+      uniqueConstraints: {},
+    };
+    const { sql, hasUnresolved } = emitDown([{ kind: "createTable", table: t }]);
+    expect(hasUnresolved).toBe(true);
+    expect(sql).toContain("WARNING: cannot auto-reverse DROP TABLE users");
+    expect(sql).toContain('-- CREATE TABLE "users"');
+  });
+
+  it("comments out a re-added dropped column and sets hasUnresolved", () => {
+    const { sql, hasUnresolved } = emitDown([
+      {
+        kind: "addColumn",
+        schema: "",
+        table: "users",
+        column: { name: "email", type: "varchar(255)", primaryKey: false, notNull: false },
+      },
+    ]);
+    expect(hasUnresolved).toBe(true);
+    expect(sql).toContain('-- ALTER TABLE "users" ADD COLUMN "email" varchar(255);');
+  });
+
+  it("documents the enum-value-removal recipe and sets hasUnresolved", () => {
+    const { sql, hasUnresolved } = emitDown([
+      { kind: "enumValueRemovalUnsupported", schema: "public", name: "role", addedValues: ["B"] },
+    ]);
+    expect(hasUnresolved).toBe(true);
+    expect(sql).toContain("Postgres cannot remove enum value(s) [B]");
+  });
+
+  it("a fully safe/verify migration has hasUnresolved=false", () => {
+    const { hasUnresolved } = emitDown([
+      { kind: "dropColumn", schema: "", table: "u", column: "a" },
+      { kind: "setNotNull", schema: "", table: "u", column: "b" },
+    ]);
+    expect(hasUnresolved).toBe(false);
+  });
+});
+
+describe("PostgresReverseBuilder", () => {
+  it("writes STUB_MARKER only when hasUnresolved is true", async () => {
+    const { PostgresReverseBuilder } = await import("../src/dialects/postgres/reverse.js");
+    const builder = new PostgresReverseBuilder();
+    const snap = (tables: Record<string, unknown>, enums = {}) =>
+      ({
+        version: "7",
+        dialect: "postgresql",
+        id: "x",
+        prevId: "00000000-0000-0000-0000-000000000000",
+        tables,
+        enums,
+        schemas: {},
+        sequences: {},
+      }) as unknown as Snapshot;
+
+    // safe: up created a table -> down drops it -> no marker
+    const safe = builder.buildReverse(
+      null,
+      snap({
+        "public.u": {
+          name: "u",
+          schema: "",
+          columns: { id: { name: "id", type: "uuid", primaryKey: true, notNull: true } },
+          indexes: {},
+          foreignKeys: {},
+          compositePrimaryKeys: {},
+          uniqueConstraints: {},
+        },
+      }),
+    );
+    expect(safe.hasUnresolved).toBe(false);
+    expect(safe.sql).not.toContain(STUB_MARKER);
+    expect(safe.sql).toContain('DROP TABLE "u";');
+
+    // lossy: up dropped a table -> down re-creates it -> marker present
+    const before = snap({
+      "public.u": {
+        name: "u",
+        schema: "",
+        columns: { id: { name: "id", type: "uuid", primaryKey: true, notNull: true } },
+        indexes: {},
+        foreignKeys: {},
+        compositePrimaryKeys: {},
+        uniqueConstraints: {},
+      },
+    });
+    const after = snap({});
+    after.prevId = before.id; // not the sentinel
+    const lossy = builder.buildReverse(before, after);
+    expect(lossy.hasUnresolved).toBe(true);
+    expect(lossy.sql.startsWith(STUB_MARKER)).toBe(true);
   });
 });
