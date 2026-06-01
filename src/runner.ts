@@ -32,13 +32,14 @@ export interface RollbackResult {
 function pairApplied(
   applied: AppliedMigration[],
   migrations: MigrationFile[],
+  out: string,
 ): Array<{ row: AppliedMigration; migration: MigrationFile }> {
   const byHash = new Map(migrations.map((m) => [m.hash, m]));
   return applied.map((row) => {
     const migration = byHash.get(row.hash);
     if (!migration) {
       throw new Error(
-        `Applied migration with hash ${row.hash} has no matching .sql file in the migrations folder.`,
+        `Applied migration id=${row.id} (hash ${row.hash}) has no matching .sql file in ${out}. The file may have been deleted or renamed, or \`out\` is misconfigured.`,
       );
     }
     return { row, migration };
@@ -81,7 +82,7 @@ export async function rollback(opts: RollbackOptions): Promise<RollbackResult> {
 
   try {
     const applied = await dialect.getApplied();
-    const targets = selectTargets(pairApplied(applied, migrations), count, to);
+    const targets = selectTargets(pairApplied(applied, migrations, config.out), count, to);
 
     const planned: PlannedRevert[] = targets.map((t) => ({
       tag: t.migration.tag,

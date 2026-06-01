@@ -50,7 +50,12 @@ export class PostgresDialect implements Dialect {
       await this.client.query(`DELETE FROM ${this.table} WHERE id = $1`, [row.id]);
       await this.client.query("COMMIT");
     } catch (err) {
-      await this.client.query("ROLLBACK");
+      try {
+        await this.client.query("ROLLBACK");
+      } catch {
+        // best-effort: the connection may already be aborted or broken,
+        // in which case the transaction is rolled back automatically.
+      }
       throw err;
     }
   }

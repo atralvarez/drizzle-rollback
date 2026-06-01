@@ -43,6 +43,12 @@ export function buildProgram(): Command {
     .option("-y, --yes", "skip the confirmation prompt")
     .action(async (count: string, opts: { to?: string; dryRun?: boolean; yes?: boolean }) => {
       const { config } = program.opts<GlobalOpts>();
+      if (!opts.to && !/^\d+$/.test(count)) {
+        throw new Error(`Invalid count "${count}". Pass a positive integer or use --to <tag>.`);
+      }
+      if (!opts.to && Number.parseInt(count, 10) < 1) {
+        throw new Error(`Count must be at least 1 (got "${count}").`);
+      }
       const resolved = await loadConfig(config);
       const result = await rollback({
         config: resolved,
