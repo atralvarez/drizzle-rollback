@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import prompts from "prompts";
 import { loadConfig } from "./config.js";
@@ -12,10 +13,15 @@ interface GlobalOpts {
 }
 
 export function buildProgram(): Command {
+  const { version } = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
+  ) as { version: string };
+
   const program = new Command();
   program
     .name("drizzle-rollback")
     .description("Reliable rollbacks for Drizzle ORM migrations")
+    .version(version, "-v, --version", "output the version number")
     .option("-c, --config <path>", "path to drizzle.config");
 
   program
