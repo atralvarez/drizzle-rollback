@@ -1,5 +1,10 @@
 # drizzle-rollback
 
+[![npm version](https://img.shields.io/npm/v/drizzle-rollback)](https://www.npmjs.com/package/drizzle-rollback)
+[![npm downloads](https://img.shields.io/npm/dm/drizzle-rollback)](https://www.npmjs.com/package/drizzle-rollback)
+[![CI](https://github.com/atralvarez/drizzle-rollback/actions/workflows/ci.yml/badge.svg)](https://github.com/atralvarez/drizzle-rollback/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/drizzle-rollback)](./LICENSE)
+
 Reliable rollbacks for [Drizzle ORM](https://orm.drizzle.team) migrations.
 
 Drizzle generates forward-only migrations and has no built-in `down`/rollback command. `drizzle-rollback` adds one without taking over your migration workflow: it reads the artifacts `drizzle-kit` already produces and reuses Drizzle's own `__drizzle_migrations` tracking table. You keep using `drizzle-kit generate` and `drizzle-kit migrate` exactly as before.
