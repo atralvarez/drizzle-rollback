@@ -1,6 +1,6 @@
 {
   "name": "drizzle-rollback",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reliable rollbacks for Drizzle ORM migrations.",
   "type": "module",
   "license": "MIT",
@@ -14,7 +14,14 @@
   },
   "homepage": "https://github.com/atralvarez/drizzle-rollback#readme",
   "packageManager": "pnpm@10.25.0",
-  "keywords": ["drizzle", "drizzle-orm", "rollback", "migration", "down", "postgres"],
+  "keywords": [
+    "drizzle",
+    "drizzle-orm",
+    "rollback",
+    "migration",
+    "down",
+    "postgres"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -37,7 +44,13 @@
       "require": "./dist/internal.cjs"
     }
   },
-  "files": ["dist", "bin", "README.md", "LICENSE", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
