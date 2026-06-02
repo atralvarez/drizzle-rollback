@@ -48,6 +48,90 @@ async function columnsOf(table: string): Promise<string[]> {
   return res.rows.map((r) => r.column_name as string);
 }
 
+describe("round-trip: FK + index + enum migration", () => {
+  const FIXTURE_RICH = join(here, "fixtures/rt-rich/drizzle");
+
+  async function scalar(sql: string, params: unknown[] = []): Promise<unknown> {
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    const res = await client.query(sql, params);
+    await client.end();
+    return res.rows[0] ? Object.values(res.rows[0])[0] : undefined;
+  }
+
+  it("reverts a FK, a DESC composite index, an enum and its column", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "dzr-rt2-")), "drizzle");
+    cpSync(FIXTURE_RICH, out, { recursive: true });
+
+    const ups = readdirSync(out)
+      .filter((f) => /^\d+_.*\.sql$/.test(f) && !f.endsWith(".down.sql"))
+      .sort();
+    expect(ups.length).toBe(2);
+
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    for (const up of ups) await runSqlFile(client, join(out, up));
+    await client.end();
+
+    // After the ups: enum type, status column, FK, and index all exist.
+    expect(await scalar("SELECT to_regtype('public.book_status') IS NOT NULL")).toBe(true);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM information_schema.columns WHERE table_name='books' AND column_name='status'",
+      ),
+    ).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM information_schema.table_constraints WHERE table_name='books' AND constraint_type='FOREIGN KEY'",
+      ),
+    ).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM pg_indexes WHERE tablename='books' AND indexname='books_title_author_idx'",
+      ),
+    ).toBe(1);
+
+    // Generate the down for the last migration; it must be fully executable (no stub).
+    generateDownStubs(out);
+    const lastTag = ups[ups.length - 1].replace(/\.sql$/, "");
+    const downPath = join(out, `${lastTag}.down.sql`);
+    const downSql = readFileSync(downPath, "utf-8");
+    expect(downSql).not.toContain("-- drizzle-rollback:stub");
+
+    const c2 = new Client({ connectionString: url });
+    await c2.connect();
+    await runSqlFile(c2, downPath);
+    await c2.end();
+
+    // After the down: all four are gone.
+    expect(await scalar("SELECT to_regtype('public.book_status') IS NULL")).toBe(true);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM information_schema.columns WHERE table_name='books' AND column_name='status'",
+      ),
+    ).toBe(0);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM information_schema.table_constraints WHERE table_name='books' AND constraint_type='FOREIGN KEY'",
+      ),
+    ).toBe(0);
+    expect(
+      await scalar(
+        "SELECT count(*)::int FROM pg_indexes WHERE tablename='books' AND indexname='books_title_author_idx'",
+      ),
+    ).toBe(0);
+
+    // Clean up tables created by migration 0000 so the shared DB is pristine for other tests.
+    const c3 = new Client({ connectionString: url });
+    await c3.connect();
+    await c3.query('DROP TABLE IF EXISTS "books" CASCADE');
+    await c3.query('DROP TABLE IF EXISTS "authors" CASCADE');
+    await c3.end();
+
+    rmSync(dirname(out), { recursive: true, force: true });
+  }, 120_000);
+});
+
 describe("round-trip: generated down reverts the up", () => {
   it("dropping the second migration restores the previous schema", async () => {
     // Copy the committed fixture to a temp dir so generate can write .down.sql files there.
