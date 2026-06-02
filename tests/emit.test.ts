@@ -238,3 +238,64 @@ describe("emitDown — unsupported guard", () => {
     expect(sql).toContain("views changed");
   });
 });
+
+describe("emitDown — SQL fidelity", () => {
+  it("qualifies DROP INDEX with a non-public schema", () => {
+    expect(emitDown([{ kind: "dropIndex", schema: "audit", name: "log_idx" }]).sql).toBe(
+      'DROP INDEX "audit"."log_idx";',
+    );
+  });
+
+  it("escapes embedded quotes in identifiers and enum values", () => {
+    expect(emitDown([{ kind: "dropTable", schema: "", table: 'we"ird' }]).sql).toBe(
+      'DROP TABLE "we""ird";',
+    );
+    expect(
+      emitDown([{ kind: "createEnum", schema: "public", name: "e", values: ["it's"] }]).sql,
+    ).toBe(`CREATE TYPE "public"."e" AS ENUM('it''s');`);
+  });
+
+  it("renders DESC and non-default NULLS ordering in CREATE INDEX", () => {
+    const index = {
+      name: "i",
+      columns: [{ expression: "a", isExpression: false, asc: false, nulls: "last" as const }],
+      isUnique: false,
+      concurrently: false,
+      method: "btree",
+      with: {},
+    };
+    // DESC default nulls is FIRST, so NULLS LAST is non-default and must be emitted.
+    expect(emitDown([{ kind: "createIndex", schema: "", table: "t", index }]).sql).toBe(
+      'CREATE INDEX "i" ON "t" USING btree ("a" DESC NULLS LAST);',
+    );
+  });
+
+  it("renders a WITH storage clause in CREATE INDEX", () => {
+    const index = {
+      name: "i",
+      columns: [{ expression: "a", isExpression: false, asc: true, nulls: "last" as const }],
+      isUnique: false,
+      concurrently: false,
+      method: "btree",
+      with: { fillfactor: 70 },
+    };
+    expect(emitDown([{ kind: "createIndex", schema: "", table: "t", index }]).sql).toBe(
+      'CREATE INDEX "i" ON "t" USING btree ("a") WITH (fillfactor = 70);',
+    );
+  });
+
+  it("includes PRIMARY KEY in a lossy re-created table column", () => {
+    const t = {
+      name: "u",
+      schema: "",
+      columns: { id: { name: "id", type: "serial", primaryKey: true, notNull: true } },
+      indexes: {},
+      foreignKeys: {},
+      compositePrimaryKeys: {},
+      uniqueConstraints: {},
+    };
+    expect(emitDown([{ kind: "createTable", table: t }]).sql).toContain(
+      '"id" serial PRIMARY KEY NOT NULL',
+    );
+  });
+});

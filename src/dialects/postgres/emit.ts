@@ -8,7 +8,9 @@ import type {
   SnapshotTable,
 } from "../../snapshot/types.js";
 
-const q = (id: string): string => `"${id}"`;
+const q = (id: string): string => `"${id.replace(/"/g, '""')}"`;
+/** A single-quoted SQL string literal with embedded quotes escaped. */
+const lit = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 /** Qualify a name with its schema; "" means the default (public) schema. */
 const qScoped = (schema: string, name: string): string =>
   schema ? `${q(schema)}.${q(name)}` : q(name);
@@ -23,21 +25,32 @@ function renderDefault(value: string | number | boolean): string {
 function columnDef(c: SnapshotColumn): string {
   let def = `${q(c.name)} ${renderType(c.type, c.typeSchema)}`;
   if (c.default !== undefined) def += ` DEFAULT ${renderDefault(c.default)}`;
+  if (c.primaryKey) def += " PRIMARY KEY";
   if (c.notNull) def += " NOT NULL";
   return def;
 }
 function indexColumn(col: SnapshotIndex["columns"][number]): string {
-  return col.isExpression ? col.expression : q(col.expression);
+  const base = col.isExpression ? col.expression : q(col.expression);
+  const dir = col.asc ? "" : " DESC";
+  // Postgres default null ordering: ASC -> NULLS LAST, DESC -> NULLS FIRST. Only emit when it deviates.
+  const defaultNulls = col.asc ? "last" : "first";
+  const nulls = col.nulls && col.nulls !== defaultNulls ? ` NULLS ${col.nulls.toUpperCase()}` : "";
+  return `${base}${dir}${nulls}`;
 }
 function createTable(t: SnapshotTable): string {
   const lines = Object.values(t.columns).map(columnDef);
   return `CREATE TABLE ${qScoped(t.schema, t.name)} (\n\t${lines.join(",\n\t")}\n);`;
 }
+function indexWith(withClause: SnapshotIndex["with"]): string {
+  const entries = Object.entries(withClause ?? {});
+  if (entries.length === 0) return "";
+  return ` WITH (${entries.map(([k, v]) => `${k} = ${v}`).join(", ")})`;
+}
 function createIndex(schema: string, table: string, ix: SnapshotIndex): string {
   const unique = ix.isUnique ? "UNIQUE " : "";
   const list = ix.columns.map(indexColumn).join(", ");
   const where = ix.where ? ` WHERE ${ix.where}` : "";
-  return `CREATE ${unique}INDEX ${q(ix.name)} ON ${qScoped(schema, table)} USING ${ix.method} (${list})${where};`;
+  return `CREATE ${unique}INDEX ${q(ix.name)} ON ${qScoped(schema, table)} USING ${ix.method} (${list})${indexWith(ix.with)}${where};`;
 }
 function addForeignKey(schema: string, table: string, fk: SnapshotForeignKey): string {
   const ref = qScoped(fk.schemaTo ?? "", fk.tableTo);
@@ -127,7 +140,7 @@ function renderOp(op: Operation): string {
     case "createIndex":
       return createIndex(op.schema, op.table, op.index);
     case "dropIndex":
-      return `DROP INDEX ${q(op.name)};`;
+      return `DROP INDEX ${qScoped(op.schema, op.name)};`;
     case "addForeignKey":
       return addForeignKey(op.schema, op.table, op.fk);
     case "dropForeignKey":
@@ -141,9 +154,9 @@ function renderOp(op: Operation): string {
     case "dropCompositePk":
       return `ALTER TABLE ${qScoped(op.schema, op.table)} DROP CONSTRAINT ${q(op.name)};`;
     case "createEnum":
-      return `CREATE TYPE ${qScoped(op.schema, op.name)} AS ENUM(${op.values.map((v) => `'${v}'`).join(", ")});`;
+      return `CREATE TYPE ${qScoped(op.schema, op.name)} AS ENUM(${op.values.map(lit).join(", ")});`;
     case "addEnumValue":
-      return `ALTER TYPE ${qScoped(op.schema, op.name)} ADD VALUE '${op.value}'${op.before ? ` BEFORE '${op.before}'` : ""};`;
+      return `ALTER TYPE ${qScoped(op.schema, op.name)} ADD VALUE ${lit(op.value)}${op.before ? ` BEFORE ${lit(op.before)}` : ""};`;
     case "dropEnum":
       return `DROP TYPE ${qScoped(op.schema, op.name)};`;
     case "createSchema":
