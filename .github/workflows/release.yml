@@ -6,6 +6,11 @@ on:
 
 concurrency: release-${{ github.ref }}
 
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -14,9 +19,11 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1; guarantee it regardless of the bundled version.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
@@ -29,4 +36,3 @@ jobs:
           version: pnpm changeset version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
