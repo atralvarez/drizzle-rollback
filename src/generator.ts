@@ -39,7 +39,11 @@ export function generateDownDrafts(out: string, opts: GenerateOptions = {}): Dow
   const snapshots = loadSnapshots(out);
   const drafts: DownDraft[] = [];
 
-  for (const migration of loadMigrations(out)) {
+  const migrations = loadMigrations(out);
+  if (opts.tag && !migrations.some((m) => m.tag === opts.tag)) {
+    throw new Error(`No migration found with tag "${opts.tag}".`);
+  }
+  for (const migration of migrations) {
     if (opts.tag && migration.tag !== opts.tag) continue;
     if (migration.hasDown && !opts.overwrite) continue;
 

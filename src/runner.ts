@@ -34,6 +34,16 @@ function pairApplied(
   migrations: MigrationFile[],
   out: string,
 ): Array<{ row: AppliedMigration; migration: MigrationFile }> {
+  const seen = new Map<string, string>();
+  for (const m of migrations) {
+    const existing = seen.get(m.hash);
+    if (existing) {
+      throw new Error(
+        `Duplicate migration hash ${m.hash} shared by "${existing}" and "${m.tag}". drizzle-rollback maps applied rows to files by hash and cannot disambiguate identical-content migrations.`,
+      );
+    }
+    seen.set(m.hash, m.tag);
+  }
   const byHash = new Map(migrations.map((m) => [m.hash, m]));
   return applied.map((row) => {
     const migration = byHash.get(row.hash);

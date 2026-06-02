@@ -106,6 +106,13 @@ describe("rollback", () => {
     expect(await appliedHashes()).toEqual([hash(UP_0), hash(UP_1)]);
   });
 
+  it("reverts everything applied after the --to target", async () => {
+    const result = await rollback({ config, to: "0000_a", yes: true });
+
+    expect(result.reverted).toEqual(["0001_b"]);
+    expect(await appliedHashes()).toEqual([hash(UP_0)]);
+  });
+
   it("refuses to revert a migration whose down is an unedited stub", async () => {
     writeFileSync(join(out, "0001_b.down.sql"), "-- drizzle-rollback:stub\n");
 

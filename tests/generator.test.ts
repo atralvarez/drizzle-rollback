@@ -119,6 +119,12 @@ describe("generateDownStubs — snapshot-diff drafts", () => {
     expect(() => readFileSync(join(out, "0000_init.down.sql"), "utf-8")).toThrow();
   });
 
+  it("throws when asked to generate an unknown tag", () => {
+    expect(() => generateDownStubs(out, { tag: "9999_nope" })).toThrow(
+      /no migration found with tag/i,
+    );
+  });
+
   it("only generates the requested tag when one is given", () => {
     writeFileSync(
       join(out, "meta", "_journal.json"),
