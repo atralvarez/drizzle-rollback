@@ -21,6 +21,8 @@ pnpm add -D drizzle-rollback
 
 `drizzle-orm` and `drizzle-kit` are peer dependencies — you bring your own. No new configuration: `drizzle-rollback` reads your existing `drizzle.config.ts` (`dialect`, `dbCredentials`, `out`, `migrations.table`/`migrations.schema`).
 
+`drizzle-rollback` executes your `drizzle.config.ts` as-is. It does **not** auto-load `.env`, so if your config reads `process.env.*`, make those variables available first — add `import "dotenv/config"` to the top of the config, or export them / run via `dotenv -e .env --`. If your config imports through a TypeScript path alias (e.g. T3's `@/env`), use a relative import there instead (e.g. `./src/env`) — the config is loaded outside your app's bundler, which is what resolves those aliases.
+
 ## Recommended setup
 
 Chain generation onto your generate script so every new migration gets a `.down.sql` draft automatically:
