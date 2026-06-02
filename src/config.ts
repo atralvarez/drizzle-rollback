@@ -29,7 +29,7 @@ export async function loadConfig(
   const cwd = opts.cwd ?? process.cwd();
   const path = configPath ? resolve(cwd, configPath) : findConfig(cwd);
 
-  const jiti = createJiti(import.meta.url);
+  const jiti = createJiti(path);
   const raw = (await jiti.import(path, { default: true })) as RawDrizzleConfig;
 
   const dialect = opts.dialectOverride ?? raw.dialect;
