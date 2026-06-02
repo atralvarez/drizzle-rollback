@@ -4,7 +4,7 @@ Reliable rollbacks for [Drizzle ORM](https://orm.drizzle.team) migrations.
 
 Drizzle generates forward-only migrations and has no built-in `down`/rollback command. `drizzle-rollback` adds one without taking over your migration workflow: it reads the artifacts `drizzle-kit` already produces and reuses Drizzle's own `__drizzle_migrations` tracking table. You keep using `drizzle-kit generate` and `drizzle-kit migrate` exactly as before.
 
-> **v0.1 — PostgreSQL only.** Down SQL is authored by hand (paired `.down.sql` files). Automatic generation of the reverse SQL from Drizzle's snapshots is planned for v0.2; MySQL/SQLite for v0.3+.
+> **v0.2 — PostgreSQL only.** `generate` now auto-drafts the reverse SQL by diffing Drizzle's `meta/NNNN_snapshot.json` files. MySQL/SQLite remain planned for v0.3+.
 
 ## How it works
 
@@ -21,9 +21,11 @@ pnpm add -D drizzle-rollback
 
 `drizzle-orm` and `drizzle-kit` are peer dependencies — you bring your own. No new configuration: `drizzle-rollback` reads your existing `drizzle.config.ts` (`dialect`, `dbCredentials`, `out`, `migrations.table`/`migrations.schema`).
 
+`drizzle-rollback` executes your `drizzle.config.ts` as-is. It does **not** auto-load `.env`, so if your config reads `process.env.*`, make those variables available first — add `import "dotenv/config"` to the top of the config, or export them / run via `dotenv -e .env --`. If your config imports through a TypeScript path alias (e.g. T3's `@/env`), use a relative import there instead (e.g. `./src/env`) — the config is loaded outside your app's bundler, which is what resolves those aliases.
+
 ## Recommended setup
 
-Chain stub generation onto your generate script so every new migration gets a `.down.sql` to fill in:
+Chain generation onto your generate script so every new migration gets a `.down.sql` draft automatically:
 
 ```jsonc
 // package.json
@@ -47,7 +49,34 @@ The binary is `drizzle-rollback` (short alias: `dzr`). A custom config path can 
 
 ### `drizzle-rollback generate`
 
-Writes a stub `.down.sql` for every migration that doesn't have one. Existing down files are never overwritten. Each stub contains a marker comment that you remove once you've written the reverse SQL.
+Writes a `.down.sql` draft for every migration that doesn't have one, by diffing the corresponding Drizzle snapshot pair (`meta/NNNN_snapshot.json` vs its predecessor). Existing down files are never overwritten unless `--overwrite` is passed.
+
+```bash
+drizzle-rollback generate                  # draft all migrations missing a .down.sql
+drizzle-rollback generate 0003_add_orders  # draft only this migration
+drizzle-rollback generate --overwrite      # regenerate even if a .down.sql exists (discards edits)
+drizzle-rollback generate --dry-run        # print drafts without writing any files
+```
+
+**Draft quality — three possible outcomes per operation:**
+
+| Outcome | Written | `check` result |
+|---|---|---|
+| Mechanically-reversible op | Executable SQL | Passes immediately |
+| May-fail-against-current-data op | Executable SQL preceded by a `-- verify:` comment | Passes (human review encouraged) |
+| Data-losing or non-expressible op | Commented-out stub block + `STUB_MARKER` line | Fails until a human edits it |
+
+Mechanically-reversible ops include: dropping a column or table that was added, dropping an index/FK/unique/enum that was created, and reversing a rename (via Drizzle's `_meta`).
+
+`-- verify:` ops are executable but may fail against real data — for example, re-adding a foreign key that was dropped, re-adding a `UNIQUE` constraint, setting `NOT NULL`, or reverting a column type change.
+
+Data-losing or non-expressible ops — such as restoring a dropped table or column (data cannot be recovered), or removing an enum value (Postgres cannot express it) — are written as commented-out SQL with the `STUB_MARKER` line above them. The `STUB_MARKER` is written **only when at least one such unresolved op exists**. A fully-safe draft has no marker and passes `check` without any editing.
+
+**Not-yet-supported sections:** some Postgres snapshot sections aren't auto-reversed yet — `checkConstraints`, sequences, row-level security (`isRLSEnabled`/`policies`), views, and roles. If a migration changes one of these, the draft includes an `unsupported` stub block plus the `STUB_MARKER`, so `check` fails until you write that part of the down by hand. The tool never silently omits a change it can't reverse.
+
+**Snapshot-missing fallback:** auto-generation requires both the migration's snapshot and its predecessor's snapshot. If either is absent (e.g. a pruned `meta/` folder), `generate` falls back to a plain hand-authoring stub for that migration. v0.2 is most useful for migrations generated from the point of adoption forward.
+
+**What the diff can and can't see:** the reverse generator works entirely from the Drizzle snapshots, which describe *schema* only. Anything not represented there is invisible to it — hand-edited SQL added to a migration file, and data migrations (`INSERT`/`UPDATE`/backfills) in particular. The generated down reverses the schema diff; you must add any data-restoration or custom steps to the `.down.sql` yourself. Always review a generated down before relying on it.
 
 ### `drizzle-rollback down [count]`
 
@@ -82,6 +111,8 @@ const config = await loadConfig();
 const result = await rollback({ config, count: 1, yes: true });
 console.log(result.reverted); // ["0005_add_widgets"]
 ```
+
+The reverse-diff engine internals (`diffReverse`, `emitDown`, `loadSnapshots`, the `Operation` IR, etc.) are available under the `drizzle-rollback/internal` subpath. They are **not** covered by semver and may change in any release — prefer the package root for anything stable.
 
 ## License
 

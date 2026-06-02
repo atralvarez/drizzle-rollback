@@ -1,13 +1,27 @@
 {
   "name": "drizzle-rollback",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reliable rollbacks for Drizzle ORM migrations.",
   "type": "module",
   "license": "MIT",
   "author": "Aitor Álvarez (https://github.com/atralvarez)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atralvarez/drizzle-rollback.git"
+  },
+  "bugs": {
+    "url": "https://github.com/atralvarez/drizzle-rollback/issues"
+  },
+  "homepage": "https://github.com/atralvarez/drizzle-rollback#readme",
+  "packageManager": "pnpm@10.25.0",
   "keywords": ["drizzle", "drizzle-orm", "rollback", "migration", "down", "postgres"],
-  "engines": { "node": ">=18" },
-  "bin": { "drizzle-rollback": "bin/drizzle-rollback.js", "dzr": "bin/drizzle-rollback.js" },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "drizzle-rollback": "bin/drizzle-rollback.js",
+    "dzr": "bin/drizzle-rollback.js"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,16 +30,25 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js",
+      "require": "./dist/internal.cjs"
     }
   },
-  "files": ["dist", "bin", "README.md", "LICENSE"],
+  "files": ["dist", "bin", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsup",
+    "prepublishOnly": "pnpm run typecheck && pnpm run lint",
+    "changeset": "changeset",
+    "release": "changeset publish"
   },
   "dependencies": {
     "commander": "^12.1.0",
@@ -34,11 +57,12 @@
     "prompts": "^2.4.2"
   },
   "peerDependencies": {
-    "drizzle-orm": ">=0.30.0",
-    "drizzle-kit": ">=0.21.0"
+    "drizzle-kit": ">=0.21.0",
+    "drizzle-orm": ">=0.30.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.31.0",
     "@testcontainers/postgresql": "^10.16.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",

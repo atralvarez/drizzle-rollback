@@ -1,6 +1,7 @@
 export { loadConfig } from "./config.js";
 export { loadMigrations } from "./repository.js";
-export { generateDownStubs } from "./generator.js";
+export { generateDownStubs, generateDownDrafts } from "./generator.js";
+export type { GenerateOptions, DownDraft } from "./generator.js";
 export { buildStatus, runCheck } from "./reporter.js";
 export type { StatusRow, CheckResult } from "./reporter.js";
 export { rollback } from "./runner.js";

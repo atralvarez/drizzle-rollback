@@ -1,8 +1,9 @@
 import { Command } from "commander";
 import prompts from "prompts";
+import pkg from "../package.json";
 import { loadConfig } from "./config.js";
 import { PostgresDialect } from "./dialects/postgres.js";
-import { generateDownStubs } from "./generator.js";
+import { generateDownDrafts, generateDownStubs } from "./generator.js";
 import { buildStatus, runCheck } from "./reporter.js";
 import { loadMigrations } from "./repository.js";
 import { rollback } from "./runner.js";
@@ -16,22 +17,41 @@ export function buildProgram(): Command {
   program
     .name("drizzle-rollback")
     .description("Reliable rollbacks for Drizzle ORM migrations")
+    .version(pkg.version, "-v, --version", "output the version number")
     .option("-c, --config <path>", "path to drizzle.config");
 
   program
     .command("generate")
-    .description("Write a stub .down.sql for every migration missing one")
-    .action(async () => {
+    .description("Write a draft .down.sql (snapshot-diff) for every migration missing one")
+    .argument("[tag]", "only generate for this migration tag")
+    .option("--overwrite", "regenerate even if a .down.sql already exists (discards edits)")
+    .option("--dry-run", "print drafts without writing files")
+    .action(async (tag: string | undefined, opts: { overwrite?: boolean; dryRun?: boolean }) => {
       const { config } = program.opts<GlobalOpts>();
       const resolved = await loadConfig(config);
-      const created = generateDownStubs(resolved.out);
+      if (opts.dryRun) {
+        const drafts = generateDownDrafts(resolved.out, { tag, overwrite: opts.overwrite });
+        if (drafts.length === 0) {
+          console.log("All migrations already have a .down.sql.");
+          return;
+        }
+        for (const d of drafts) {
+          console.log(
+            `\n--- ${d.tag}.down.sql${d.hasUnresolved ? " (needs review)" : ""} ---\n${d.sql}`,
+          );
+        }
+        return;
+      }
+      const created = generateDownStubs(resolved.out, { tag, overwrite: opts.overwrite });
       if (created.length === 0) {
         console.log("All migrations already have a .down.sql.");
-      } else {
-        console.log(`Created ${created.length} stub(s):`);
-        for (const tag of created) console.log(`  ${tag}.down.sql`);
-        console.log("\nEdit each stub (remove the marker line) before relying on it.");
+        return;
       }
+      console.log(`Wrote ${created.length} down file(s):`);
+      for (const t of created) console.log(`  ${t}.down.sql`);
+      console.log(
+        "\nReview each draft. Lines marked with a stub marker or '-- verify:' need a human decision.",
+      );
     });
 
   program

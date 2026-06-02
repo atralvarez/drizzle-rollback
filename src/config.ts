@@ -29,7 +29,7 @@ export async function loadConfig(
   const cwd = opts.cwd ?? process.cwd();
   const path = configPath ? resolve(cwd, configPath) : findConfig(cwd);
 
-  const jiti = createJiti(import.meta.url);
+  const jiti = createJiti(path);
   const raw = (await jiti.import(path, { default: true })) as RawDrizzleConfig;
 
   const dialect = opts.dialectOverride ?? raw.dialect;
@@ -40,6 +40,16 @@ export async function loadConfig(
   }
   if (!raw.dbCredentials) {
     throw new Error("drizzle config is missing `dbCredentials`.");
+  }
+  if (
+    "url" in raw.dbCredentials &&
+    (typeof raw.dbCredentials.url !== "string" || raw.dbCredentials.url.length === 0)
+  ) {
+    throw new Error(
+      "dbCredentials.url resolved to empty/undefined — is your env var loaded? " +
+        "drizzle-rollback runs your drizzle.config.ts as-is and does NOT auto-load .env; " +
+        'add `import "dotenv/config"` to the top of your config, or export the variable.',
+    );
   }
 
   const outRaw = raw.out ?? DEFAULT_OUT;

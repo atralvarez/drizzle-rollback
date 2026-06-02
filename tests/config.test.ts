@@ -21,3 +21,11 @@ describe("loadConfig", () => {
     );
   });
 });
+
+describe("loadConfig — real-world configs", () => {
+  it("throws a clear error when dbCredentials.url resolves empty (env not loaded)", async () => {
+    await expect(
+      loadConfig(join(__dirname, "fixtures/empty-url/drizzle.config.ts")),
+    ).rejects.toThrow(/url resolved to empty|auto-load \.env|dotenv/i);
+  });
+});
