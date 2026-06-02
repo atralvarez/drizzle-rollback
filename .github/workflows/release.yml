@@ -21,7 +21,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+          # No registry-url: it writes an .npmrc auth token (NODE_AUTH_TOKEN) that makes npm
+          # attempt token auth and conflicts with OIDC trusted publishing (causes E404 on PUT).
       # Trusted Publishing (OIDC) requires npm >= 11.5.1; guarantee it regardless of the bundled version.
       - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
