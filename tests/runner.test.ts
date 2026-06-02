@@ -119,4 +119,32 @@ describe("rollback", () => {
     await expect(rollback({ config, count: 1, yes: true })).rejects.toThrow(/stub/i);
     expect(await appliedHashes()).toEqual([hash(UP_0), hash(UP_1)]);
   });
+
+  it("ignores an unmatched baseline row (e.g. drizzle-kit push) when reverting recent migrations", async () => {
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    await client.query(
+      'INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES (\'db_push_baseline\', 0)',
+    );
+    await client.end();
+
+    const result = await rollback({ config, count: 1, yes: true });
+
+    expect(result.reverted).toEqual(["0001_b"]);
+    // The baseline (oldest) and 0000_a remain — the baseline never blocked the revert.
+    expect(await appliedHashes()).toEqual(["db_push_baseline", hash(UP_0)]);
+  });
+
+  it("still errors when the migration being reverted has no matching file", async () => {
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    await client.query(
+      'INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES (\'orphan_head\', 3)',
+    );
+    await client.end();
+
+    await expect(rollback({ config, count: 1, yes: true })).rejects.toThrow(
+      /no matching \.sql file/i,
+    );
+  });
 });
