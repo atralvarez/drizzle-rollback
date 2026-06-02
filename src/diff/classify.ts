@@ -6,6 +6,7 @@ const LOSSY = new Set<Operation["kind"]>([
   "createTable",
   "addColumn",
   "enumValueRemovalUnsupported",
+  "unsupported",
 ]);
 const VERIFY = new Set<Operation["kind"]>([
   "alterColumnType",

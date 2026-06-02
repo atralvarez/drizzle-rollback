@@ -12,6 +12,11 @@ function defOf(c: SnapshotColumn): string | number | boolean | undefined {
   return c.default;
 }
 
+/** True if two snapshot sub-sections differ (used to flag sections we cannot auto-reverse). */
+function sectionChanged(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
+}
+
 /**
  * Build the reverse operations to take the schema from `current` back to `prev`.
  * `prev = null` means the first migration (diff against an empty schema).
@@ -181,6 +186,24 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
       if (!cur.compositePrimaryKeys[name])
         ops.push({ kind: "addCompositePk", schema: tSchema, table: tName, pk });
     }
+
+    // Sections we do not auto-reverse yet: flag any change so `check` fails (no silent gap).
+    const tableLabel = tSchema ? `"${tSchema}"."${tName}"` : `"${tName}"`;
+    if (sectionChanged(cur.checkConstraints, old.checkConstraints)) {
+      ops.push({ kind: "unsupported", detail: `check constraints changed on table ${tableLabel}` });
+    }
+    if (sectionChanged(cur.policies, old.policies)) {
+      ops.push({
+        kind: "unsupported",
+        detail: `row-level security policies changed on table ${tableLabel}`,
+      });
+    }
+    if ((cur.isRLSEnabled ?? false) !== (old.isRLSEnabled ?? false)) {
+      ops.push({
+        kind: "unsupported",
+        detail: `row-level security enablement changed on table ${tableLabel}`,
+      });
+    }
   }
 
   // --- enums ---
@@ -244,6 +267,20 @@ export function diffReverse(prev: Snapshot | null, current: Snapshot): Operation
   for (const name of Object.keys(before.schemas)) {
     if (renamedSchemaOld.has(name)) continue;
     if (!current.schemas[name]) ops.push({ kind: "createSchema", name });
+  }
+
+  // Top-level sections we do not auto-reverse yet.
+  if (sectionChanged(current.sequences, before.sequences)) {
+    ops.push({ kind: "unsupported", detail: "sequences changed" });
+  }
+  if (sectionChanged(current.policies, before.policies)) {
+    ops.push({ kind: "unsupported", detail: "top-level policies changed" });
+  }
+  if (sectionChanged(current.views, before.views)) {
+    ops.push({ kind: "unsupported", detail: "views changed" });
+  }
+  if (sectionChanged(current.roles, before.roles)) {
+    ops.push({ kind: "unsupported", detail: "roles changed" });
   }
 
   return ops;

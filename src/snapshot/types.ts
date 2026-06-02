@@ -49,6 +49,11 @@ export interface SnapshotCompositePk {
   columns: string[];
 }
 
+export interface SnapshotCheck {
+  name: string;
+  value: string;
+}
+
 export interface SnapshotTable {
   name: string;
   /** "" means the default (public) schema. */
@@ -58,6 +63,9 @@ export interface SnapshotTable {
   foreignKeys: Record<string, SnapshotForeignKey>;
   compositePrimaryKeys: Record<string, SnapshotCompositePk>;
   uniqueConstraints: Record<string, SnapshotUnique>;
+  checkConstraints?: Record<string, SnapshotCheck>;
+  policies?: Record<string, unknown>;
+  isRLSEnabled?: boolean;
 }
 
 export interface SnapshotEnum {
@@ -86,5 +94,8 @@ export interface Snapshot {
   enums: Record<string, SnapshotEnum>;
   schemas: Record<string, string>;
   sequences: Record<string, unknown>;
+  policies?: Record<string, unknown>;
+  views?: Record<string, unknown>;
+  roles?: Record<string, unknown>;
   _meta?: SnapshotMeta;
 }

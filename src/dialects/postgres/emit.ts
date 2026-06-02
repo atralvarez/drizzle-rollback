@@ -92,6 +92,8 @@ function phaseOf(op: Operation): number {
       return 15;
     case "enumValueRemovalUnsupported":
       return 16;
+    case "unsupported":
+      return 17;
   }
 }
 
@@ -150,6 +152,8 @@ function renderOp(op: Operation): string {
       return `DROP SCHEMA ${q(op.name)};`;
     case "enumValueRemovalUnsupported":
       return ""; // handled as a lossy stub block
+    case "unsupported":
+      return ""; // handled as a lossy stub block
   }
 }
 
@@ -171,6 +175,9 @@ function lossyBlock(op: Operation): string {
   }
   if (op.kind === "enumValueRemovalUnsupported") {
     return `-- WARNING: Postgres cannot remove enum value(s) [${op.addedValues.join(", ")}] from ${op.schema}.${op.name} with simple DDL.\n-- Recipe (write by hand if needed): create a new type without the value, swap dependent columns to it, drop the old type, rename.`;
+  }
+  if (op.kind === "unsupported") {
+    return `-- WARNING: drizzle-rollback could not auto-reverse the following change(s); write the reverse by hand:\n-- ${op.detail}`;
   }
   return commentOut(renderOp(op));
 }

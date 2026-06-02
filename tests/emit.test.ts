@@ -229,3 +229,12 @@ describe("PostgresReverseBuilder", () => {
     expect(lossy.sql.startsWith(STUB_MARKER)).toBe(true);
   });
 });
+
+describe("emitDown — unsupported guard", () => {
+  it("renders an unsupported op as a warning stub and sets hasUnresolved", () => {
+    const { sql, hasUnresolved } = emitDown([{ kind: "unsupported", detail: "views changed" }]);
+    expect(hasUnresolved).toBe(true);
+    expect(sql).toContain("could not auto-reverse");
+    expect(sql).toContain("views changed");
+  });
+});

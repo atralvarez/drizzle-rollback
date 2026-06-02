@@ -333,3 +333,50 @@ describe("diffReverse — review-found edge cases", () => {
     expect(ops).not.toContainEqual({ kind: "createSchema", name: "audit" });
   });
 });
+
+describe("diffReverse — completeness guard (unhandled sections)", () => {
+  const tableWith = (extra: Record<string, unknown>) => ({
+    ...table("t", { id: col("id", "uuid") }),
+    ...extra,
+  });
+
+  it("flags a table check-constraint change as unsupported", () => {
+    const prev = snap({ "public.t": table("t", { id: col("id", "uuid") }) });
+    const current = snap({
+      "public.t": tableWith({
+        checkConstraints: { t_chk: { name: "t_chk", value: '"id" IS NOT NULL' } },
+      }),
+    });
+    expect(diffReverse(prev, current)).toContainEqual({
+      kind: "unsupported",
+      detail: 'check constraints changed on table "t"',
+    });
+  });
+
+  it("flags an RLS enablement change as unsupported", () => {
+    const prev = snap({ "public.t": tableWith({ isRLSEnabled: false }) });
+    const current = snap({ "public.t": tableWith({ isRLSEnabled: true }) });
+    expect(diffReverse(prev, current)).toContainEqual({
+      kind: "unsupported",
+      detail: 'row-level security enablement changed on table "t"',
+    });
+  });
+
+  it("flags a top-level view change as unsupported", () => {
+    const prev = snap({}, { views: {} });
+    const current = snap({}, { views: { "public.v": { name: "v" } } });
+    expect(diffReverse(prev, current)).toContainEqual({
+      kind: "unsupported",
+      detail: "views changed",
+    });
+  });
+
+  it("does not flag when unhandled sections are unchanged", () => {
+    const prev = snap({ "public.t": table("t", { id: col("id", "uuid") }) });
+    const current = snap({
+      "public.t": table("t", { id: col("id", "uuid"), name: col("name", "text") }),
+    });
+    const ops = diffReverse(prev, current);
+    expect(ops.some((o) => o.kind === "unsupported")).toBe(false);
+  });
+});
