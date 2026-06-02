@@ -27,7 +27,7 @@
       "require": "./dist/internal.cjs"
     }
   },
-  "files": ["dist", "bin", "README.md", "LICENSE"],
+  "files": ["dist", "bin", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
