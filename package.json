@@ -36,7 +36,9 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "prepare": "tsup",
-    "prepublishOnly": "pnpm run typecheck && pnpm run lint"
+    "prepublishOnly": "pnpm run typecheck && pnpm run lint",
+    "changeset": "changeset",
+    "release": "changeset publish"
   },
   "dependencies": {
     "commander": "^12.1.0",
@@ -50,6 +52,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.31.0",
     "@testcontainers/postgresql": "^10.16.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",

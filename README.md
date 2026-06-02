@@ -74,6 +74,8 @@ Data-losing or non-expressible ops — such as restoring a dropped table or colu
 
 **Snapshot-missing fallback:** auto-generation requires both the migration's snapshot and its predecessor's snapshot. If either is absent (e.g. a pruned `meta/` folder), `generate` falls back to a plain hand-authoring stub for that migration. v0.2 is most useful for migrations generated from the point of adoption forward.
 
+**What the diff can and can't see:** the reverse generator works entirely from the Drizzle snapshots, which describe *schema* only. Anything not represented there is invisible to it — hand-edited SQL added to a migration file, and data migrations (`INSERT`/`UPDATE`/backfills) in particular. The generated down reverses the schema diff; you must add any data-restoration or custom steps to the `.down.sql` yourself. Always review a generated down before relying on it.
+
 ### `drizzle-rollback down [count]`
 
 Reverts applied migrations, newest first. Defaults to `1`.
