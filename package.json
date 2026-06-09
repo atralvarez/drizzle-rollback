@@ -76,7 +76,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@changesets/cli": "^2.31.0",
-    "@testcontainers/postgresql": "^10.16.0",
+    "@testcontainers/postgresql": "^12.0.1",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "@types/prompts": "^2.4.9",
